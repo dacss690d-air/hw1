@@ -1,0 +1,106 @@
+---
+title: "Homework 1: DACSS 690D"
+subtitle: "Middle East Mobile Subscribers Dashboard"
+author: "Antonia Rohlfing"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(ggplot2)
+library(dplyr)
+library(sf)
+# loading data from github
+geojson_url <- "https://raw.githubusercontent.com/dacss690d-air/hw1/refs/heads/main/middle_east_mobiles.geojson" #making an object
+middle_east_data <- st_read(geojson_url)
+```
+
+Data source: <https://github.com/dacss690d-air/hw1>
+
+```{r}
+# CHOROPLETH MAP
+choropleth_map <- ggplot(middle_east_data) +
+  geom_sf(aes(fill = mobiles), color = "black") + 
+  scale_fill_gradient(low = "turquoise", high = "black", name = "Mobile Subscribers") +
+  labs(title = "Middle East Mobile Subscribers - Choropleth Map",
+       caption = "Data source: https://github.com/dacss690d-air/hw1") 
+
+
+# PROPORTIONAL SYMBOLS MAP
+
+# I was running into some issues with how this looked, asked GPT to clean it up
+# using `sf` to calculate approximate points from geometry
+centroids <- st_centroid(middle_east_data)  
+
+# extracting longitude and latitude
+coords <- st_coordinates(centroids)
+middle_east_data$longitude <- coords[, 1]  
+middle_east_data$latitude <- coords[, 2]  
+
+# after a couple of iterations...
+prop_symbols_map <- ggplot(middle_east_data) +
+  geom_sf(fill = "lightgray", color = "black") +
+  geom_point(aes(x = longitude, y = latitude, size = mobiles), color = "purple", alpha = 0.6) +
+  scale_size_continuous(
+    name = "Mobile Subscribers",
+    breaks = c(3e6, 5e6, 1e7, 2e7, 3e7, 4e7, 5e7, 7.5e7, 1e8),
+    labels = c("3M", "5M", "10M", "20M", "30M", "40M", "50M", "75M", "100M"),
+    range = c(2, 15)    
+  ) +
+  labs(title = "Middle East Mobile Subscribers - Proportional Symbols Map",
+       caption = "Data source: https://github.com/dacss690d-air/hw1") 
+
+
+# DOT DENSITY MAP 
+
+# scaling dots proportionally
+middle_east_data <- middle_east_data |>
+  mutate(dots_count = round(mobiles / 800000))
+
+# function to generate random points inside a polygon
+random_points <- function(poly, n) {
+  if (n <= 0) return(NULL)  # Skip if no dots
+  points <- st_sample(poly, size = n, type = "random")  # Random points inside polygon
+  return(points)
+}
+# installed lwgeom package
+library(lwgeom)
+# Generate dots for all countries
+all_dots <- NULL
+for (i in 1:nrow(middle_east_data)) {
+  poly <- middle_east_data[i, ]
+  dots <- random_points(poly$geometry, poly$dots_count)
+  if (!is.null(dots)) {
+    dots_sf <- st_sf(geometry = dots, Country = poly$Country)  # Add country label
+    all_dots <- rbind(all_dots, dots_sf)
+  }
+}
+
+dot_density_map <- ggplot() +
+  geom_sf(data = middle_east_data, fill = "lightgray", color = "black") +  # Country outlines
+  geom_sf(data = all_dots, color = "darkgreen", size = 0.7, alpha = 0.6) +  
+  labs(title = "Middle East Mobile Subscriber - Dot Density Map",
+       subtitle = "Each dot represents 800000 subscribers",
+       caption = "Data source: https://github.com/dacss690d-air/hw1") 
+```
+
+## Proportional Symbols Map
+
+```{r}
+print(prop_symbols_map)
+```
+
+## Choropleth Map
+
+```{r}
+print(choropleth_map)
+```
+
+## Dot Density Map
+
+``` {r}
+print(dot_density_map)
+```
